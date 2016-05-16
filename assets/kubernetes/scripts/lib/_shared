@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+REQUIRED_ENV=()
+
+function check_environment {
+  local required=("${@}")
+
+  for req in "${required[@]}"; do
+    if [ -z "$(eval echo \$$req)" ]; then
+      echo "Missing required config value: ${req}"
+      exit 1
+    fi
+  done
+}
+
+function calculate_defaults {
+  local required_for_calculated_defaults=(
+    'NETWORK_SUBNET_SERVICES'
+    'NETWORK_SUBNET_INTERNAL'
+    'NETWORK_SUBNET_EXTERNAL'
+  )
+
+  check_environment ${required_for_calculated_defaults[@]}
+
+  local network_subnet_services_prefix=$(echo ${NETWORK_SUBNET_SERVICES} | cut -d . -f -2)
+  local network_subnet_internal_prefix=$(echo ${NETWORK_SUBNET_INTERNAL} | cut -d . -f -3)
+  local network_subnet_external_prefix=$(echo ${NETWORK_SUBNET_EXTERNAL} | cut -d . -f -3)
+
+  local calculated_kubernetes_master_address_external=${network_subnet_external_prefix}.1
+  local calculated_kubernetes_master_address_internal=${network_subnet_internal_prefix}.16
+  local calculated_kubernetes_dns_address_external=${network_subnet_external_prefix}.254
+  local calculated_kubernetes_dns_address_service=${network_subnet_services_prefix}.254.254
+  local calculated_etcd_initial_cluster=master0=http://${network_subnet_internal_prefix}.17:2380,master1=http://${network_subnet_internal_prefix}.18:2380,master2=http://${network_subnet_internal_prefix}.19:2380
+  
+  KUBERNETES_MASTER_ADDRESS_EXTERNAL=${KUBERNETES_MASTER_ADDRESS_EXTERNAL:-${calculated_kubernetes_master_address_external}}
+  KUBERNETES_MASTER_ADDRESS_INTERNAL=${KUBERNETES_MASTER_ADDRESS_INTERNAL:-${calculated_kubernetes_master_address_internal}}
+  KUBERNETES_DNS_ADDRESS_EXTERNAL=${KUBERNETES_DNS_ADDRESS_EXTERNAL:-${calculated_kubernetes_dns_address_external}}
+  KUBERNETES_DNS_ADDRESS_SERVICE=${KUBERNETES_DNS_ADDRESS_SERVICE:-${calculated_kubernetes_dns_address_service}}
+  ETCD_INITIAL_CLUSTER=${ETCD_INITIAL_CLUSTER:-${calculated_etcd_initial_cluster}}
+}
+
+function print_environment {
+  local required=($(echo "${REQUIRED_ENV[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+   for req in "${required[@]}"; do
+     echo "${req}=$(eval echo \$$req)"
+  done 
+}
+
+function prepare {
+  # uniquely sort the required environment from script fragments
+  local required=($(echo "${REQUIRED_ENV[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+  calculate_defaults
+  check_environment ${required[@]}
+  print_environment
+}

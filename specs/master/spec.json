@@ -1,0 +1,14 @@
+{
+  "id": "master",
+  "boot": {
+    "kernel": "/assets/coreos/vendored/coreos_production_pxe.vmlinuz",
+    "initrd": ["/assets/coreos/vendored/coreos_production_pxe_image.cpio.gz"],
+    "cmdline": {
+      "cloud-config-url": "http://192.168.1.34:8080/cloud?uuid=${uuid}&mac=${net0/mac:hexhyp}",
+      "coreos.config.url": "http://192.168.1.34:8080/ignition?uuid=${uuid}&mac=${net0/mac:hexhyp}",
+      "coreos.autologin": ""
+    }
+  },
+  "cloud_id": "master.yaml",
+  "ignition_id": "master.yaml"
+}

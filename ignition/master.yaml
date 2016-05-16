@@ -1,0 +1,138 @@
+---
+ignition_version: 1
+storage:
+  filesystems:
+    - device: /dev/disk/by-label/ROOT
+      format: ext4
+      files:
+        - path: /etc/hostname
+          mode: 0420
+          contents: |
+            {{.hostname}}
+
+passwd:
+  users:
+    - name: core
+      password_hash: "$1$XTYM6nrB$tEY2d3erMjzZCPY6vp2pT1"
+      {{ if .ssh_authorized_keys }}
+      ssh_authorized_keys:
+        {{ range $element := .ssh_authorized_keys }}
+        - {{$element}}
+        {{end}}
+      {{end}}
+
+systemd:
+  units:
+    - name: install.service
+      enable: true
+      contents: |
+        [Unit]
+        Requires=system-config.target network-online.target
+        After=system-config.target network-online.target
+        ConditionFirstBoot=yes
+
+        [Service]
+        Type=oneshot
+        EnvironmentFile=/etc/metadata
+        ExecStart=/usr/bin/mkdir -p /etc/kubernetes
+        ExecStart=/usr/bin/wget --no-check-certificate -T 1 -r -P /etc/kubernetes/scripts --no-parent -nH --cut-dirs=3 ${BOOTCFG_URL}/assets/kubernetes/scripts
+        ExecStart=/bin/sh -c 'chmod +x /etc/kubernetes/scripts/*'
+        ExecStart=/etc/kubernetes/scripts/{{.role}}
+
+        [Install]
+        WantedBy=default.target
+    - name: docker.service
+      enable: true
+      dropins: 
+        - name: 90-network.conf
+          contents: |
+            [Service]
+            Environment="DOCKER_OPT_BIP=--bip={{.network_subnet_pods}} --ip-masq=false --iptables=false"
+    - name: ntpd.service
+      enable: true
+      dropins: 
+        - name: 10-forced-sync.conf
+          contents: |
+            [Service]
+            ExecStartPre=/usr/sbin/ntpd -gq
+    - name: var-lib-kubernetes.mount
+      enable: true
+      contents: |
+        [Unit]
+        Before=kubelet.service
+
+        [Mount]
+        What=/dev/disk/by-label/KUBERNETES
+        Where=/var/lib/kubernetes
+        Type=xfs
+
+        [Install]
+        WantedBy=kubelet.service
+    - name: var-lib-etcd.mount
+      enable: true
+      contents: |
+        [Unit]
+        Before=kubelet.service
+
+        [Mount]
+        What=/dev/disk/by-label/ETCD
+        Where=/var/lib/etcd
+        Type=xfs
+
+        [Install]
+        WantedBy=kubelet.service
+    - name: var-lib-docker.mount
+      enable: true
+      contents: |
+        [Unit]
+        Before=docker.service
+
+        [Mount]
+        What=/dev/disk/by-label/DOCKER
+        Where=/var/lib/docker
+        Type=xfs
+
+        [Install]
+        WantedBy=docker.service
+    - name: var-lib-hostdirs.mount
+      enable: true
+      contents: |
+        [Mount]
+        What=/dev/disk/by-label/HOSTDIRS
+        Where=/var/lib/hostdirs
+        Type=xfs
+
+        [Install]
+        WantedBy=kubelet.service
+
+networkd:
+  units:
+    - name: bond0.netdev
+      contents: |
+        [NetDev]
+        Name=bond0
+        Kind=bond
+
+        [Bond]
+        Mode=802.3ad
+        TransmitHashPolicy=layer3+4
+        MIIMonitorSec=1s
+        LACPTransmitRate=fast
+        UpDelaySec=2s
+        DownDelaySec=8s
+    - name: bond0.network
+      contents: |
+        [Match]
+        Name=en*
+        
+        [Network]
+        Bond=bond0
+    - name: management.network
+      contents: |
+        [Match]
+        Name=bond0
+
+        [Network]
+        Address={{.network_static_net}}
+        Gateway={{.network_static_gw}}
+        DNS={{.network_static_dns}}

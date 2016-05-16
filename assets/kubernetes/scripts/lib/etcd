@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+REQUIRED_ENV+=('HOSTNAME')
+REQUIRED_ENV+=('ETCD_INITIAL_CLUSTER')
+REQUIRED_ENV+=('REGION')
+REQUIRED_ENV+=('KUBERNETES_NODE_ADDRESS')
+
+function setup_etcd {
+  mkdir -p /etc/kubernetes/manifests
+
+  local template=/etc/kubernetes/manifests/etcd.manifest
+  cat << EOF > ${template}
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: etcd 
+  namespace: kube-system
+spec: 
+  hostNetwork: true
+  volumes:
+    - name: var-lib-etcd
+      hostPath:
+        path: /var/lib/etcd
+  containers: 
+    - name: etcd
+      image: quay.io/coreos/etcd:v2.2.5
+      env:
+        - name: ETCD_NAME
+          value: ${HOSTNAME}
+        - name: ETCD_DATA_DIR
+          value: /var/lib/etcd
+        - name: ETCD_INITIAL_CLUSTER
+          value: ${ETCD_INITIAL_CLUSTER}
+        - name: ETCD_INITIAL_CLUSTER_TOKEN
+          value: kubernetes-${REGION}
+        - name: ETCD_INITIAL_ADVERTISE_PEER_URLS
+          value: http://${KUBERNETES_NODE_ADDRESS}:2380
+        - name: ETCD_ADVERTISE_CLIENT_URLS
+          value: http://localhost:2379
+        - name: ETCD_LISTEN_PEER_URLS
+          value: http://${KUBERNETES_NODE_ADDRESS}:2380
+        - name: ETCD_LISTEN_CLIENT_URLS
+          value: http://127.0.0.1:2379
+      livenessProbe:
+        httpGet:
+          host: 127.0.0.1
+          path: /health
+          port: 2379 
+        initialDelaySeconds: 300
+        timeoutSeconds: 5
+      volumeMounts:
+        - name: var-lib-etcd
+          mountPath: /var/lib/etcd
+EOF
+}

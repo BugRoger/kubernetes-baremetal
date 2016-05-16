@@ -1,0 +1,8 @@
+KUBERNETES_DNS_DOMAIN        ?= kubernetes.d26a.de
+KUBERNETES_EXTERNAL_DNS_NAME ?= apiserver.kubernetes.d26a.de
+
+NETWORK_SUBNET_INTERNAL ?= 192.168.2.0/24
+NETWORK_SUBNET_SERVICES ?= 10.0.0.0/16
+NETWORK_SUBNET_EXTERNAL ?= 10.1.0.0/16
+
+include certificates.mk

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o pipefail
+
+cd "$(dirname "$0")"
+
+. lib/_shared
+. lib/kubeconfig
+. lib/kubelet
+. lib/etcd
+. lib/kubernetes
+. lib/addons
+
+function main {
+  prepare
+  setup_etcd
+  setup_kubernetes
+  setup_kubelet
+  setup_addons
+}
+
+main

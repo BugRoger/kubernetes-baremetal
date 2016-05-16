@@ -1,0 +1,38 @@
+#!/bin/bash -e
+# USAGE: ./scripts/get-coreos
+# USAGE: ./scripts/get-coreos beta 877.1.0
+
+CHANNEL=${1:-"stable"}
+VERSION=${2:-"current"}
+DEST=${PWD}assets/coreos/$VERSION
+
+echo "Downloading CoreOS kernel and initrd image assets"
+
+if [ ! -d "$DEST" ]; then
+  echo "Creating directory $DEST"
+  mkdir -p $DEST
+fi
+
+# kernel and sig
+BASE_URL=http://$CHANNEL.release.core-os.net/amd64-usr/$VERSION
+curl $BASE_URL/coreos_production_pxe.vmlinuz -o $DEST/coreos_production_pxe.vmlinuz
+curl $BASE_URL/coreos_production_pxe.vmlinuz.sig -o $DEST/coreos_production_pxe.vmlinuz.sig
+
+# initrd and sig
+curl $BASE_URL/coreos_production_pxe_image.cpio.gz -o $DEST/coreos_production_pxe_image.cpio.gz
+curl $BASE_URL/coreos_production_pxe_image.cpio.gz.sig -o $DEST/coreos_production_pxe_image.cpio.gz.sig
+
+# image and sig
+curl $BASE_URL/coreos_production_image.bin.bz2 -o $DEST/coreos_production_image.bin.bz2
+curl $BASE_URL/coreos_production_image.bin.bz2.sig -o $DEST/coreos_production_image.bin.bz2.sig
+
+# verify signatures
+curl https://coreos.com/security/image-signing-key/CoreOS_Image_Signing_Key.asc -o $DEST/CoreOS_Image_Signing_Key.asc
+gpg --import < "$DEST/CoreOS_Image_Signing_Key.asc"
+echo "Adding trust for CoreOS signing key:"
+echo "04127D0BFABEC8871FFB2CCE50E0885593D2DCB4:6:" | gpg --import-ownertrust
+gpg --verify $DEST/coreos_production_pxe.vmlinuz.sig
+gpg --verify $DEST/coreos_production_pxe_image.cpio.gz.sig
+gpg --verify $DEST/coreos_production_image.bin.bz2.sig
+
+ln -s ${PWD}assets/coreos/$VERSION ${PWD}assets/coreos/vendored

@@ -1,0 +1,4 @@
+build
+image
+assets/kubernetes/ssl/*.pem
+assets/kubernetes/ssl/*.srl

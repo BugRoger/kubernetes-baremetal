@@ -1,0 +1,79 @@
+#!/bin/bash
+
+set -o errexit
+set -o pipefail
+set -x
+
+DEST=/var/lib/kubernetes-baremetal
+UUID=$(cat /etc/machine-id)
+MAC=$(cat /sys/class/net/en*/address | tail -n 1)
+
+function prepare {
+  mkdir -p $DEST/oem
+  mkdir -p $DEST/oem/bin
+  cd $DEST
+}
+
+function fetch_configuration {
+  wget --no-check-certificate -T 1 -O metadata         $BOOTCFG_URL/metadata?mac=${MAC}&uuid=${UUID}
+  wget --no-check-certificate -T 1 -O ignition         $BOOTCFG_URL/ignition?mac=${MAC}&uuid=${UUID}
+  wget --no-check-certificate -T 1 -O coreos-install   $BOOTCFG_URL/assets/coreos/coreos-install
+
+  chmod +x coreos-install 
+}
+
+function install_os {
+  $DEST/coreos-install \
+    -d /dev/sda \
+    -V vendored \
+    -i $DEST/ignition \
+    -b $BOOTCFG_URL/assets/coreos \
+    -v
+  udevadm settle
+}
+
+function prepare_root {
+  ROOT=$(readlink -f /dev/disk/by-label/ROOT)
+
+  mkdir -p "${DEST}/rootfs"
+  trap "umount '${DEST}/rootfs'" EXIT
+
+  mount "${ROOT}" "${DEST}/rootfs"
+  cp metadata ${DEST}/rootfs/etc/ 
+}
+
+function prepare_volumes {
+  # So, yeah. This should really be done in Ignition. We weren't able to do this
+  # both because of bugged behaviour as well as repeatedly running Ignition is 
+  # apparently not intended. Revisit this when we get some feedback from CoreOS.
+
+  . metadata
+
+  cgpt repair /dev/sda
+
+  if ! blkid /dev/disk/by-partlabel/ETCD &> /dev/null; then
+    /sbin/sgdisk --new=10:40960000:+20480000  --change-name=10:ETCD \
+                 --new=11:61442048:+40960000  --change-name=11:HOSTDIRS \
+                 --new=12:102404096:+40960000 --change-name=12:KUBERNETES \
+                 --new=13:143366144:+0        --change-name=13:DOCKER \
+                 /dev/sda 
+  fi
+
+  udevadm settle
+  
+  (blkid /dev/disk/by-partlabel/ETCD     | grep xfs &> /dev/null) || mkfs.xfs /dev/disk/by-partlabel/ETCD     -L ETCD
+  (blkid /dev/disk/by-partlabel/HOSTDIRS | grep xfs &> /dev/null) || mkfs.xfs /dev/disk/by-partlabel/HOSTDIRS -L HOSTDIRS
+  mkfs.xfs /dev/disk/by-partlabel/DOCKER     -f -L DOCKER
+  mkfs.xfs /dev/disk/by-partlabel/KUBERNETES -f -L KUBERNETES
+}
+
+function start_installation {
+  reboot
+}
+
+prepare
+fetch_configuration
+install_os
+prepare_volumes
+prepare_root
+start_installation

@@ -1,0 +1,21 @@
+#!/bin/bash -e
+# USAGE: ./scripts/get-kubernetes
+# USAGE: ./scripts/get-kubernetes v1.4.0-alpha.8 
+
+VERSION=${1:-"v1.2.0-beta.0"}
+DEST=${PWD}assets/kubernetes/binaries/${VERSION}
+BASE_URL=https://storage.googleapis.com/kubernetes-release/release/${VERSION}/bin/linux/amd64
+
+if [ ! -d "${DEST}" ]; then
+  echo "Creating directory ${DEST}"
+  mkdir -p ${DEST}
+fi
+
+echo "Downloading Kubernetes Binaries" 
+
+curl ${BASE_URL}/kubelet      -o ${DEST}/kubelet
+curl ${BASE_URL}/kubelet.sha1 -o ${DEST}/kubelet.sha1
+
+echo "$(cat ${DEST}/kubelet.sha1)  ${DEST}/kubelet" | sha1sum -c -
+
+ln -s ${DEST} ${PWD}assets/kubernetes/binaries/vendored

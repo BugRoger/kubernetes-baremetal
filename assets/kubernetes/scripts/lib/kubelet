@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+REQUIRED_ENV+=('BOOTCFG_URL')
+REQUIRED_ENV+=('KUBERNETES_VERSION')
+REQUIRED_ENV+=('KUBERNETES_NODE_ADDRESS')
+REQUIRED_ENV+=('KUBERNETES_DNS_DOMAIN')
+REQUIRED_ENV+=('NETWORK_STATIC_DNS')
+
+function get_kubelet_binaries {
+  mkdir -p /opt/bin
+  wget --no-check-certificate -O /opt/bin/kubelet ${BOOTCFG_URL}/assets/kubernetes/binaries/${KUBERNETES_VERSION}/kubelet
+  chmod +x /opt/bin/kubelet
+}
+
+function create_kubelet_service {
+  mkdir -p /etc/systemd/system
+
+  local template=/etc/systemd/system/kubelet.service
+  cat << EOF > ${template}
+[Service]
+EnvironmentFile=/etc/metadata
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/bin:/usr/share/oem/bin
+ExecStart=/opt/bin/kubelet \
+  --address=${KUBERNETES_NODE_ADDRESS} \
+  --port=10250 \
+  --hostname-override=${KUBERNETES_NODE_ADDRESS} \
+  --tls-private-key-file=/etc/kubernetes/ssl/kubelet-key.pem \
+  --tls-cert-file=/etc/kubernetes/ssl/kubelet.pem \
+  --api-servers=https://${KUBERNETES_NODE_ADDRESS} \
+  --kubeconfig=/etc/kubernetes/config/kubelet \
+  --allow-privileged=true \
+  --host-network-sources="*" \
+  --config=/etc/kubernetes/manifests \
+  --cluster_domain=${KUBERNETES_DNS_DOMAIN} \
+  --max-pods=250
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+function start_kubelet {
+  systemctl daemon-reload
+  systemctl enable kubelet
+  systemctl start kubelet
+}
+
+function setup_kubelet {
+  get_kubelet_binaries
+  get_certificate   ca
+  get_certificate   kubelet
+  create_kubeconfig kubelet
+  create_kubelet_service
+  start_kubelet
+}

@@ -1,0 +1,49 @@
+---
+api_version: v1alpha1
+groups:
+
+  - name: master0
+    spec: master
+    require:
+      mac: 9c:b6:54:06:67:1c
+    metadata: &MASTER
+      hostname: master0 
+      role:     master
+      region:   d26a
+      bootcfg_url: http://192.168.1.34:8080
+      kubernetes_version: v1.2.4
+
+      kubernetes_dns_domain:   kubernetes.d26a.de
+      kubernetes_node_address: 192.168.2.17
+
+      network_subnet_internal: 192.168.2.0/24
+      network_subnet_pods:     172.16.17.1/24
+      network_subnet_services: 10.0.0.0/16
+      network_subnet_external: 10.1.0.0/16
+
+      network_static_net: 192.168.2.17/24
+      network_static_gw:  192.168.2.1
+      network_static_dns: 192.168.1.2
+     
+  - name: master1
+    spec: master
+    require:
+      mac: 38:ea:a7:a4:a1:39
+    metadata:
+      <<: *MASTER
+      hostname: master1 
+      kubernetes_node_address: 192.168.2.18
+      network_subnet_pods:     172.16.18.1/24 
+      network_static_net:      192.168.2.18/24
+
+  - name: master2
+    spec: master
+    require:
+      mac: 9c:b6:54:06:6c:5e
+    metadata:
+      <<: *MASTER
+      hostname: master2 
+      kubernetes_node_address: 192.168.2.19
+      network_subnet_pods:     172.16.19.1/24 
+      network_static_net:      192.168.2.19/24
+

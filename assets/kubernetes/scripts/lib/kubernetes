@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+
+REQUIRED_ENV+=('KUBERNETES_VERSION')
+REQUIRED_ENV+=('KUBERNETES_NODE_ADDRESS')
+REQUIRED_ENV+=('NETWORK_SUBNET_SERVICES')
+
+function create_kubernetes_manifest {
+  mkdir -p /etc/kubernetes/manifests
+
+  local template=/etc/kubernetes/manifests/kubernetes.manifest
+  cat << EOF > ${template}
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: kubernetes
+  namespace: kube-system
+spec: 
+  hostNetwork: true
+  volumes:
+    - name: etc-kubernetes
+      hostPath:
+        path: /etc/kubernetes
+    - name: etc-ssl-certs 
+      hostPath:
+        path: /etc/ssl/certs/
+  containers: 
+    - name: apiserver
+      image: gcr.io/google_containers/hyperkube-amd64:${KUBERNETES_VERSION}
+      args: 
+        - /hyperkube
+        - apiserver
+        - --admission-control=NamespaceLifecycle,LimitRanger,SecurityContextDeny,ServiceAccount,ResourceQuota
+        - --advertise-address=${KUBERNETES_NODE_ADDRESS}
+        - --allow-privileged=true
+        - --apiserver-count=3
+        - --bind-address=${KUBERNETES_NODE_ADDRESS}
+        - --client-ca-file=/etc/kubernetes/ssl/ca.pem
+        - --etcd-servers=http://127.0.0.1:2379
+        - --kubelet-certificate-authority=/etc/kubernetes/ssl/ca.pem
+        - --kubelet-client-certificate=/etc/kubernetes/ssl/kubelet.pem
+        - --kubelet-client-key=/etc/kubernetes/ssl/kubelet-key.pem
+        - --kubelet-https=true
+        - --runtime-config=extensions/v1beta1=true
+        - --secure_port=443
+        - --service-account-key-file=/etc/kubernetes/ssl/ca-key.pem
+        - --service-cluster-ip-range=${NETWORK_SUBNET_SERVICES}
+        - --tls-cert-file=/etc/kubernetes/ssl/apiserver.pem
+        - --tls-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem
+      livenessProbe:
+        httpGet:
+          host: 127.0.0.1 
+          path: /healthz
+          port: 8080
+        initialDelaySeconds: 15
+        timeoutSeconds: 1
+      volumeMounts:
+        - mountPath: /etc/kubernetes
+          name: etc-kubernetes
+          readOnly: true
+        - mountPath: /etc/ssl/certs
+          name: etc-ssl-certs 
+          readOnly: true
+    - name: controller-manager
+      image: gcr.io/google_containers/hyperkube-amd64:${KUBERNETES_VERSION}
+      args: 
+        - /hyperkube
+        - controller-manager
+        - --kubeconfig=/etc/kubernetes/config/controller-manager
+        - --leader-elect=true
+        - --root-ca-file=/etc/kubernetes/ssl/ca.pem
+        - --service-account-private-key-file=/etc/kubernetes/ssl/ca-key.pem
+      livenessProbe:
+        httpGet:
+          host: 127.0.0.1 
+          path: /healthz
+          port: 10252
+        initialDelaySeconds: 15
+        timeoutSeconds: 1
+      volumeMounts:
+        - mountPath: /etc/kubernetes
+          name: etc-kubernetes
+          readOnly: true
+    - name: scheduler
+      image: gcr.io/google_containers/hyperkube-amd64:${KUBERNETES_VERSION}
+      args: 
+        - /hyperkube
+        - scheduler 
+        - --kubeconfig=/etc/kubernetes/config/scheduler
+        - --leader-elect=true
+      livenessProbe:
+        httpGet:
+          host: 127.0.0.1 
+          path: /healthz
+          port: 10251
+        initialDelaySeconds: 15
+        timeoutSeconds: 1
+      volumeMounts:
+        - mountPath: /etc/kubernetes
+          name: etc-kubernetes
+          readOnly: true
+    - name: proxy 
+      image: gcr.io/google_containers/hyperkube-amd64:${KUBERNETES_VERSION}
+      args: 
+        - /hyperkube
+        - proxy 
+        - --kubeconfig=/etc/kubernetes/config/proxy
+      volumeMounts:
+        - mountPath: /etc/kubernetes
+          name: etc-kubernetes
+          readOnly: true
+      securityContext:
+        privileged: true
+EOF
+}
+
+
+function setup_kubernetes {
+  local certs=(
+    "ca"
+    "apiserver"
+    "controller-manager"
+    "scheduler"
+    "proxy"
+  )
+
+  for cert in "${certs[@]}"; do
+    get_certificate   ${cert} 
+    create_kubeconfig ${cert}
+  done
+
+  create_kubernetes_manifest
+}

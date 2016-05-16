@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+REQUIRED_ENV+=('KUBERNETES_VERSION')
+REQUIRED_ENV+=('KUBERNETES_NODE_ADDRESS')
+
+function create_kube-proxy_manifest {
+  mkdir -p /etc/kubernetes/manifests
+
+  local template=/etc/kubernetes/manifests/kube-proxy.manifest
+  cat << EOF > ${template}
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: kubernetes
+  namespace: kube-system
+spec: 
+  hostNetwork: true
+  volumes:
+    - name: etc-kubernetes
+      hostPath:
+        path: /etc/kubernetes
+  containers: 
+    - name: proxy 
+      image: gcr.io/google_containers/hyperkube-amd64:${KUBERNETES_VERSION}
+      args: 
+        - /hyperkube
+        - proxy 
+        - --kubeconfig=/etc/kubernetes/config/proxy
+      volumeMounts:
+        - mountPath: /etc/kubernetes
+          name: etc-kubernetes
+          readOnly: true
+      securityContext:
+        privileged: true
+EOF
+}
+
+function setup_kube-proxy {
+  local certs=(
+    "ca"
+    "proxy"
+  )
+
+  for cert in "${certs[@]}"; do
+    get_certificate   ${cert} 
+    create_kubeconfig ${cert}
+  done
+
+  create_kube-proxy_manifest
+}
