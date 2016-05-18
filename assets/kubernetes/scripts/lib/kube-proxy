@@ -26,6 +26,7 @@ spec:
         - /hyperkube
         - proxy 
         - --kubeconfig=/etc/kubernetes/config/proxy
+        - --masquerade-all=true
       volumeMounts:
         - mountPath: /etc/kubernetes
           name: etc-kubernetes
